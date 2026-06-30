@@ -90,6 +90,10 @@ module bram_sample_writer #(
     reg adc_overrun_latched  = 1'b0;
     reg adc_underrun_latched = 1'b0;
 
+    // Stable sample_idx for pl_status — only updates on bank-fill events
+    // (prevents high-speed toggling from triggering continuous GPIO interrupts)
+    reg [15:0] sample_idx_stable = 16'd0;
+
     wire capture_enable      = ps_control[2];
     wire writer_busy         = (write_state != W_IDLE);
 
@@ -117,7 +121,7 @@ module bram_sample_writer #(
     wire [15:0] in_ch4 = sample_data[15:0];
 
     assign pl_status = {
-        sample_idx,            // [31:16]
+        sample_idx_stable,     // [31:16] stable — only updated on bank-fill
         8'd0,                  // [15:8]
         adc_underrun_latched,  // [7]
         adc_overrun_latched,   // [6]
@@ -154,11 +158,12 @@ module bram_sample_writer #(
         bram_we <= 4'b0000;
 
         if (!rst_n || soft_reset) begin
-            write_state         <= W_IDLE;
-            sample_hold         <= 64'd0;
-            sample_idx          <= 16'd0;
-            bank0_ready         <= 1'b0;
-            bank1_ready         <= 1'b0;
+            write_state          <= W_IDLE;
+            sample_hold          <= 64'd0;
+            sample_idx           <= 16'd0;
+            sample_idx_stable    <= 16'd0;
+            bank0_ready          <= 1'b0;
+            bank1_ready          <= 1'b0;
             overflow            <= 1'b0;
             active_bank         <= 1'b0;
             writing_bank        <= 1'b0;
@@ -237,7 +242,8 @@ module bram_sample_writer #(
 
                 W_DONE: begin
                     if (sample_idx >= BANK_SAMPLE_COUNT - 1) begin
-                        sample_idx <= 16'd0;
+                        sample_idx        <= 16'd0;
+                        sample_idx_stable <= sample_idx;
 
                         if (writing_bank == 1'b0) begin
                             bank0_ready <= 1'b1;

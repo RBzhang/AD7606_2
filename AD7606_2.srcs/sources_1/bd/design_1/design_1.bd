@@ -420,6 +420,9 @@
           "PCW_FPGA_FCLK0_ENABLE": {
             "value": "1"
           },
+          "PCW_IRQ_F2P_INTR": {
+            "value": "1"
+          },
           "PCW_MIO_14_IOTYPE": {
             "value": "LVCMOS 3.3V"
           },
@@ -467,6 +470,9 @@
           },
           "PCW_UIPARAM_DDR_PARTNO": {
             "value": "MT41K256M16 RE-125"
+          },
+          "PCW_USE_FABRIC_INTERRUPT": {
+            "value": "1"
           }
         },
         "interface_ports": {
@@ -660,6 +666,9 @@
           "C_ALL_OUTPUTS_2": {
             "value": "1"
           },
+          "C_INTERRUPT_PRESENT": {
+            "value": "1"
+          },
           "C_IS_DUAL": {
             "value": "1"
           }
@@ -826,6 +835,12 @@
       }
     },
     "nets": {
+      "axi_gpio_0_ip2intc_irpt": {
+        "ports": [
+          "axi_gpio_0/ip2intc_irpt",
+          "processing_system7_0/IRQ_F2P"
+        ]
+      },
       "processing_system7_0_FCLK_CLK0": {
         "ports": [
           "processing_system7_0/FCLK_CLK0",

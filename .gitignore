@@ -26,9 +26,13 @@ usage_statistics_*.txt
 # Vitis build outputs
 vitis/hello_world/build/
 vitis/hello_world/_ide/
-vitis/platform_ad7606/
+vitis/hello_world/compile_commands.json
+vitis/hello_world/vitis-comp.json
 vitis/hello_world/src/.cache/
-vitis/hello_world/src/.clangd/
+vitis/hello_world/src/.clangd
+vitis/hello_world/src/compile_commands.json
+vitis/platform_ad7606/
+vitis/_ide/
 
 # Binary outputs
 *.elf
