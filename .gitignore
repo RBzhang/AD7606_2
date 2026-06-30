@@ -1,0 +1,40 @@
+# Vivado project
+AD7606_2.cache/
+AD7606_2.hw/
+AD7606_2.ip_user_files/
+AD7606_2.runs/
+AD7606_2.sim/
+AD7606_2.gen/
+
+# Vivado generated files
+*.jou
+*.log
+*.str
+*.backup.jou
+*.backup.log
+vivado_*.zip
+vivado_*.xml
+usage_statistics_*.txt
+
+# Bitstream and checkpoints
+*.bit
+*.dcp
+*.ltx
+*.bmm
+*.mmi
+
+# Vitis build outputs
+vitis/hello_world/build/
+vitis/hello_world/_ide/
+vitis/platform_ad7606/
+vitis/hello_world/src/.cache/
+vitis/hello_world/src/.clangd/
+
+# Binary outputs
+*.elf
+*.xsa
+*.lpr
+
+# OS files
+.DS_Store
+Thumbs.db
