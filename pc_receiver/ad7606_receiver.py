@@ -41,8 +41,12 @@ PACKET_PAYLOAD_MAX = SAMPLES_PER_PACKET * 8  # 1456 bytes
 FRAGMENTS_PER_BANK = (BANK_SAMPLE_COUNT + SAMPLES_PER_PACKET - 1) // SAMPLES_PER_PACKET
 CHANNELS = 4
 
+# Set to "" to accept all senders, or set to sender IP to filter (e.g. "192.168.1.10")
+TARGET_IP = "192.168.10.200"
 
-def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int):
+
+def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int,
+                 target_ip: str = ""):
     """Receive UDP data and write per-channel binary files."""
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -60,6 +64,8 @@ def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int
     sock.settimeout(10.0)
 
     print(f"\nListening on UDP port {port}...")
+    if target_ip:
+        print(f"Filtering by source IP: {target_ip}")
     if max_duration > 0:
         print(f"Duration: {max_duration:.1f}s")
     if max_banks > 0:
@@ -89,6 +95,9 @@ def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int
             except socket.timeout:
                 print("[TIMEOUT] No data received for 10 seconds. Stopping.")
                 break
+
+            if target_ip and addr[0] != target_ip:
+                continue
 
             if len(data) < HEADER_SIZE:
                 print(f"[WARN] Received short packet ({len(data)} bytes) from {addr}")
@@ -204,7 +213,8 @@ def main():
         print("Error: Specify --duration or --max-banks")
         sys.exit(1)
 
-    receive_data(args.port, args.output_dir, args.duration, args.max_banks)
+    receive_data(args.port, args.output_dir, args.duration, args.max_banks,
+                 TARGET_IP)
 
 
 if __name__ == "__main__":

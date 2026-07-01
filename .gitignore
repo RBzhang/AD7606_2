@@ -23,37 +23,35 @@ usage_statistics_*.txt
 *.bmm
 *.mmi
 
-# Vitis build outputs
-vitis/hello_world/build/
-vitis/hello_world/_ide/
-vitis/hello_world/compile_commands.json
-vitis/hello_world/vitis-comp.json
-vitis/hello_world/src/.cache/
-vitis/hello_world/src/.clangd
-vitis/hello_world/src/compile_commands.json
-vitis/platform_ad7606/
-vitis/_ide/
+# Classic Vitis workspace (obsolete)
+vitis/
 
 # Binary outputs
 *.elf
-*.xsa
 *.lpr
 
-# Vitis ethernet app build outputs
-vitis/adc_ethernet/build/
-vitis/adc_ethernet/_ide/
-vitis/adc_ethernet/compile_commands.json
-vitis/adc_ethernet/vitis-comp.json
-vitis/adc_ethernet/src/.cache/
-vitis/adc_ethernet/src/.clangd
-vitis/adc_ethernet/src/compile_commands.json
-vitis/ethernet_stream/build/
-vitis/ethernet_stream/_ide/
-vitis/ethernet_stream/compile_commands.json
-vitis/ethernet_stream/vitis-comp.json
-vitis/ethernet_stream/src/.cache/
-vitis/ethernet_stream/src/.clangd
-vitis/ethernet_stream/src/compile_commands.json
+# Vitis Unified workspace build artifacts
+vitis_unified/**/build/
+vitis_unified/**/_ide/
+vitis_unified/**/.cache/
+vitis_unified/**/.clangd/
+vitis_unified/**/compile_commands.json
+vitis_unified/**/bsp/
+vitis_unified/**/zynq_fsbl_bsp/
+vitis_unified/**/libsrc/
+vitis_unified/**/hw_artifacts/
+vitis_unified/**/resources/
+vitis_unified/**/export/
+vitis_unified/**/*.yaml
+vitis_unified/**/*.spec
+vitis_unified/**/*.cmake
+vitis_unified/**/.rigel_lopper/
+vitis_unified/**/IDE.log
+vitis_unified/**/.metadata/
+vitis_unified/**/ps7_init*
+vitis_unified/**/*.bif
+vitis_unified/**/BOOT.bin
+vitis_unified/**/linker_files/
 
 # PC receiver data
 ad7606_data/

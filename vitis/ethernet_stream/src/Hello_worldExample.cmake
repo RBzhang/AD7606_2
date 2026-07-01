@@ -1,6 +1,0 @@
-cmake_minimum_required(VERSION 3.16)
-
-set(HELLO_WORLD_EX_PROCESSOR psu_cortexa9_core0)
-set(HELLO_WORLD_EX_LANG c)
-set(HELLO_WORLD_EX_MEMORY_REQUIREMENTS 0x40000)
-set(HELLO_WORLD_EX_MEMORY ps7_ddr_0)

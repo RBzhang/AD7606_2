@@ -28,10 +28,10 @@
 #include "sleep.h"
 
 /* ========== Network ========== */
-#define DEST_IP_ADDR   "192.168.1.100"
-#define LOCAL_IP_ADDR  "192.168.1.10"
+#define DEST_IP_ADDR   "192.168.10.1"
+#define LOCAL_IP_ADDR  "192.168.10.200"
 #define NET_MASK       "255.255.255.0"
-#define GW_ADDR        "192.168.1.1"
+#define GW_ADDR        "192.168.10.10"
 #define UDP_PORT       5001
 
 /* ========== AXI address map ========== */
@@ -105,6 +105,35 @@ static void gpio_isr(void *ref)
     *gpio_ip_isr = 0x1;
 }
 
+/* ========== GEM SLCR clock setup (bypassed in SDT flow) ========== */
+#define SLCR_BASE         0xF8000000U
+#define SLCR_UNLOCK_ADDR  (SLCR_BASE + 0x008U)
+#define SLCR_LOCK_ADDR    (SLCR_BASE + 0x004U)
+#define SLCR_GEM0_CLK     (SLCR_BASE + 0x140U)
+#define SLCR_LOCK_KEY     0x767B
+#define SLCR_UNLOCK_KEY   0xDF0D
+
+static void setup_gem_clock_1000mbps(void)
+{
+    volatile uint32_t *slcr_unlock = (volatile uint32_t *)SLCR_UNLOCK_ADDR;
+    volatile uint32_t *slcr_lock   = (volatile uint32_t *)SLCR_LOCK_ADDR;
+    volatile uint32_t *slcr_gem0   = (volatile uint32_t *)SLCR_GEM0_CLK;
+
+    uint32_t reg = *slcr_gem0;
+
+    if (reg & 0x40) return;
+
+    *slcr_unlock = SLCR_UNLOCK_KEY;
+
+    reg &= 0xFC0FC0FFU;
+    reg |= (1U << 20) | (8U << 8);
+
+    *slcr_gem0 = reg;
+    *slcr_lock = SLCR_LOCK_KEY;
+
+    xil_printf("[INIT] GEM0 SLCR clock set for 1000Mbps\r\n");
+}
+
 static int init_intr(void)
 {
     XScuGic_Config *cfg = XScuGic_LookupConfig(XPAR_SCUGIC_SINGLE_DEVICE_ID);
@@ -158,10 +187,10 @@ static void udp_send_bank(int is_bank1)
         for (uint32_t i=0; i<n; i++) {
             uint32_t w0 = bram[i*2];
             uint32_t w1 = bram[i*2+1];
-            dst[i*4+0] = (uint16_t)(w0 >> 16);      /* ch2 */
-            dst[i*4+1] = (uint16_t)(w0 & 0xFFFF);    /* ch1 */
-            dst[i*4+2] = (uint16_t)(w1 >> 16);        /* ch4 */
-            dst[i*4+3] = (uint16_t)(w1 & 0xFFFF);    /* ch3 */
+            dst[i*4+0] = (uint16_t)(w0 & 0xFFFF);    /* ch1 */
+            dst[i*4+1] = (uint16_t)(w0 >> 16);      /* ch2 */
+            dst[i*4+2] = (uint16_t)(w1 & 0xFFFF);    /* ch3 */
+            dst[i*4+3] = (uint16_t)(w1 >> 16);        /* ch4 */
         }
 
         udp_sendto(g_udp, p, &g_dest_ip, UDP_PORT);
@@ -192,15 +221,18 @@ int main(void)
     }
     xil_printf("[INIT] interrupts configured\r\n");
 
+    /* Configure GEM clock via SLCR (SDT flow skips this step) */
+    setup_gem_clock_1000mbps();
+
     /* lwIP init */
     xil_printf("[INIT] lwIP starting...\r\n");
     lwip_init();
 
     ip_addr_t ip, nm, gw;
-    IP4_ADDR(&ip, 192,168,1,10);
+    IP4_ADDR(&ip, 192,168,10,200);
     IP4_ADDR(&nm, 255,255,255,0);
-    IP4_ADDR(&gw, 192,168,1,1);
-    IP4_ADDR(&g_dest_ip, 192,168,1,100);
+    IP4_ADDR(&gw, 192,168,10,10);
+    IP4_ADDR(&g_dest_ip, 192,168,10,1);
 
     if (!xemac_add(&g_netif, &ip, &nm, &gw, NULL, XPAR_XEMACPS_0_BASEADDR)) {
         xil_printf("[ERR] xemac_add failed\r\n");
@@ -214,20 +246,25 @@ int main(void)
     udp_bind(g_udp, IP_ADDR_ANY, UDP_PORT);
     xil_printf("[INIT] UDP on port %d ready\r\n", UDP_PORT);
 
-    /* set link up (MDIO not functional, PHY auto-negotiated via hardware) */
+    /* set link up (PHY auto-negotiated by hardware during phy_setup_emacps delay) */
     xil_printf("[INIT] setting forced link up...\r\n");
+    sleep(2);
     g_netif.flags |= NETIF_FLAG_LINK_UP;
     g_link_up = 1;
 
     /* soft reset PL writer */
     xil_printf("[INIT] resetting PL...\r\n");
     *gpio2_data = CTRL_SOFTRST;
+    xil_printf("[DBG] softrst set, dly...\r\n");
     busy_dly(50000);
+    xil_printf("[DBG] softrst dly done, clearing...\r\n");
     *gpio2_data = 0;
+    xil_printf("[DBG] softrst cleared\r\n");
 
     /* enable capture */
     xil_printf("[INIT] capture ON\r\n\r\n");
     *gpio2_data = CTRL_CAP_EN;
+    xil_printf("[DBG] cap_en set, st=0x%08lX\r\n", (unsigned long)*gpio_data);
 
     int nbanks = 0;
     int max    = 0;   /* 0 = unlimited streaming */
@@ -257,8 +294,6 @@ int main(void)
 
         if (ev & STAT_BANK0) {
             uint32_t st = *gpio_data;
-            xil_printf("[BANK0] idx=%lu\r\n",
-                       (unsigned long)((st>>STAT_IDX_SHIFT)&0xFFFF));
 
             if (st & STAT_ADC_OVR) pulse(CTRL_CLR_OVR);
             if (st & STAT_OVF)     pulse(CTRL_CLR_OVF);
@@ -276,8 +311,6 @@ int main(void)
 
         if (ev & STAT_BANK1) {
             uint32_t st = *gpio_data;
-            xil_printf("[BANK1] idx=%lu\r\n",
-                       (unsigned long)((st>>STAT_IDX_SHIFT)&0xFFFF));
 
             if (st & STAT_ADC_OVR) pulse(CTRL_CLR_OVR);
             if (st & STAT_OVF)     pulse(CTRL_CLR_OVF);
@@ -291,6 +324,10 @@ int main(void)
             g_events &= ~STAT_BANK1;
             __asm__ volatile("cpsie i");
             nbanks++;
+        }
+
+        if (nbanks % 10 == 0) {
+            xil_printf("[%d banks sent]\r\n", nbanks);
         }
     }
 
