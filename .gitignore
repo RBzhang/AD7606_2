@@ -39,6 +39,29 @@ vitis/_ide/
 *.xsa
 *.lpr
 
+# Vitis ethernet app build outputs
+vitis/adc_ethernet/build/
+vitis/adc_ethernet/_ide/
+vitis/adc_ethernet/compile_commands.json
+vitis/adc_ethernet/vitis-comp.json
+vitis/adc_ethernet/src/.cache/
+vitis/adc_ethernet/src/.clangd
+vitis/adc_ethernet/src/compile_commands.json
+vitis/ethernet_stream/build/
+vitis/ethernet_stream/_ide/
+vitis/ethernet_stream/compile_commands.json
+vitis/ethernet_stream/vitis-comp.json
+vitis/ethernet_stream/src/.cache/
+vitis/ethernet_stream/src/.clangd
+vitis/ethernet_stream/src/compile_commands.json
+
+# PC receiver data
+ad7606_data/
+ad7606_data.bin
+
+# VS Code
+.vscode/
+
 # OS files
 .DS_Store
 Thumbs.db

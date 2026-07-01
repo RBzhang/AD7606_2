@@ -4,28 +4,12 @@ cmake_minimum_required(VERSION 3.16)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/Hello_worldExample.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/UserConfig.cmake)
-set(APP_NAME hello_world)
+set(APP_NAME adc_ethernet)
 project(${APP_NAME})
 
 enable_language(C ASM CXX)
 find_package(common)
-collect(PROJECT_LIB_DEPS xilstandalone;xiltimer)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+collect(PROJECT_LIB_DEPS xilstandalone;xiltimer;lwip220)
 
 
 

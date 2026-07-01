@@ -1,73 +1,24 @@
-# Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc.  All rights reserved.
+# Copyright (C) 2023-2024 Advanced Micro Devices, Inc.  All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.16)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/Hello_worldExample.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/UserConfig.cmake)
-set(APP_NAME hello_world)
+set(APP_NAME ethernet_stream)
 project(${APP_NAME})
 
 enable_language(C ASM CXX)
 find_package(common)
-collect(PROJECT_LIB_DEPS xilstandalone;xiltimer)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Link lwIP libraries (IPv4). These names may vary; use
+#   vitis -s <platform>.xsa --generate-app --app-template lwip_echo_server
+# to autogenerate the correct CMakeLists.txt if linking fails.
+collect(PROJECT_LIB_DEPS xilstandalone;xiltimer;lwip4_lib)
 
 collect(PROJECT_LIB_DEPS xil)
 collect(PROJECT_LIB_DEPS gcc)
 collect(PROJECT_LIB_DEPS c)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/Hello_worldExample.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/UserConfig.cmake)
 
 list (APPEND _sources ${USER_COMPILE_SOURCES})
 foreach (source ${_sources})

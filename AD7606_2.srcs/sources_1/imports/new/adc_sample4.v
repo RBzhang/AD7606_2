@@ -45,7 +45,7 @@ module adc_sample4 #(
     parameter integer ADC_TOTAL_CH     = 8,         // AD7606/AD7606C=8, AD7606-6=6, AD7606-4=4
     parameter integer RESET_CLKS       = 10,        // 50MHz 下 10clk = 200ns
     parameter integer CONVST_HIGH_CLKS = 2,         // 50MHz 下 2clk = 40ns
-    parameter integer RD_LOW_CLKS      = 2,         // 50MHz 下 2clk = 40ns
+    parameter integer RD_LOW_CLKS      = 5,         // 50MHz 下 5clk = 100ns (满足 t_ACC=31ns + 充分余量)
     parameter integer RD_HIGH_CLKS     = 2          // 50MHz 下 2clk = 40ns
 )(
     input  wire        clk,
@@ -89,18 +89,7 @@ module adc_sample4 #(
 
     assign data_out = {ch1_data, ch2_data, ch3_data, ch4_data};
 
-    ila_data ila_data_inst (
-        .clk(clk),
-        .probe4(ch1_data),
-        .probe1(ch2_data),
-        .probe2(ch3_data),
-        .probe3(ch4_data),
-        .probe0(data_valid),
-        .probe5(adc_convst_a),
-        .probe6(adc_cs_n),
-        .probe7(adc_rd_n),
-        .probe8(adc_reset)
-    );
+
     // ============================================================
     // 固定配置
     // ============================================================
@@ -155,7 +144,7 @@ module adc_sample4 #(
         S_DONE        = 4'd9;
 
     reg [3:0]  state     = S_RESET;
-    reg [3:0]  ch_idx    = 4'd0;
+    (* mark_debug = "true" *) reg [3:0]  ch_idx    = 4'd0;
     reg [31:0] delay_cnt = 32'd0;
 
     // ============================================================
@@ -205,13 +194,31 @@ module adc_sample4 #(
     // ============================================================
     // adc_db 输入寄存器 (setup/hold 保护)
     // ============================================================
-    // AD7606 的 DB[15:0] 在 RD 拉低后的 t_ACC (max 31ns) 内稳定。
-    // 本设计 RD_LOW_CLKS=2 提供约 40ns 的 RD 低电平时间，
-    // 数据在 S_RD_SAMPLE 状态时已被 adc_db_synced 寄存器捕获。
-    reg [15:0] adc_db_synced = 16'd0;
+    // AD7606/AD7606C 的 DB[15:0] 在 RD 拉低后的 t_ACC (max 31ns) 内稳定。
+    // 使用两级寄存器流水线，S_RD_SAMPLE 采样第二级，确保数据在 RD 低电平
+    // 末尾有充分的建立时间后再被捕获。
+    (* mark_debug = "true" *) reg [15:0] adc_db_synced  = 16'd0;
+    (* mark_debug = "true" *) reg [15:0] adc_db_synced2 = 16'd0;
 
+    ila_data ila_data_inst (
+        .clk(clk),
+        .probe0(data_valid),
+        .probe1(ch1_data),
+        .probe2(ch2_data),
+        .probe3(ch3_data),
+        .probe4(ch4_data),
+        
+        .probe5(adc_convst_a),
+        .probe6(adc_cs_n),
+        .probe7(adc_rd_n),
+        .probe8(adc_reset),
+        .probe9(ch_idx),
+        .probe10(adc_db_synced),
+        .probe11(adc_db_synced2)
+    );
     always @(posedge clk) begin
-        adc_db_synced <= adc_db;
+        adc_db_synced  <= adc_db;
+        adc_db_synced2 <= adc_db_synced;
     end
 
     // ============================================================
@@ -399,19 +406,20 @@ module adc_sample4 #(
             end
 
             // ====================================================
-            // 采样 DB[15:0] (经 adc_db_synced 寄存器同步)
+            // 采样 DB[15:0] (经 adc_db_synced2 两级寄存器同步)
             // 第 1 次读出 V1，第 2 次读出 V2，依次类推。
             // 这里不直接更新 chx_data，而是先写入 chx_tmp。
+            // 使用第二级寄存器确保数据在 RD 低电平末尾充分稳定。
             // ====================================================
             S_RD_SAMPLE: begin
                 adc_cs_n <= 1'b0;
                 adc_rd_n <= 1'b0;
 
                 case (ch_idx)
-                    4'd0: ch1_tmp <= adc_db_synced;
-                    4'd1: ch2_tmp <= adc_db_synced;
-                    4'd2: ch3_tmp <= adc_db_synced;
-                    4'd3: ch4_tmp <= adc_db_synced;
+                    4'd0: ch1_tmp <= adc_db_synced2;
+                    4'd1: ch2_tmp <= adc_db_synced2;
+                    4'd2: ch3_tmp <= adc_db_synced2;
+                    4'd3: ch4_tmp <= adc_db_synced2;
                     default: begin
                     end
                 endcase

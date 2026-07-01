@@ -65,8 +65,11 @@ AD7606/AD7606C ──→ adc_sample4 ──→ bram_sample_writer ──→ BRAM
 
 | 文件 | 作用 |
 |---|---|
-| `helloworld.c` | 中断驱动采集：GIC 初始化 + AXI GPIO 中断配置 + ISR 设 flag + main 读取打印 |
+| `helloworld.c` | 中断驱动采集（UART 打印模式） |
+| `adc_ethernet/src/helloworld.c` | 中断驱动采集（以太网 UDP 流式发送，无限发送，PC 端实时接收） |
 | `platform.c` / `platform.h` | Zynq 平台初始化 (cache, UART) |
+| `pc_receiver/ad7606_receiver.py` | PC 端 UDP 接收器，按通道分文件存储 |
+| `pc_receiver/ad7606_plot.py` | PC 端数据绘图工具，读取分通道文件绘制波形 |
 
 ---
 
@@ -99,6 +102,15 @@ AD7606/AD7606C ──→ adc_sample4 ──→ bram_sample_writer ──→ BRAM
   byte offset +4: word1 = {ch4[15:0], ch3[15:0]}
 
 ARM little-endian 读取: int16_t 数组顺序为 ch1, ch2, ch3, ch4
+```
+
+PC 端接收后按通道拆分存储为独立文件：
+```
+<output_dir>/
+  ch1.bin   -- 通道 1 样本 (int16 LE)
+  ch2.bin   -- 通道 2 样本 (int16 LE)
+  ch3.bin   -- 通道 3 样本 (int16 LE)
+  ch4.bin   -- 通道 4 样本 (int16 LE)
 ```
 
 ---
@@ -243,3 +255,153 @@ AXI GPIO 的 `ip2intc_irpt` 是电平触发信号，必须在 GIC 中配置为 L
 
 ### 9.6 1 MSPS 升级
 如需提升至 1 MSPS：FCLK0→100MHz, `ADC_TOTAL_CH=4`, `SAMPLE_PERIOD_CLKS=100`。此时 bank 填满时间从 41ms 缩短至 4.1ms，PS 仍需约 0.3ms 读取 BRAM，CPU 利用率 <10%。需额外开启 PS ENET0 配合 lwIP UDP 发送。
+
+---
+
+## 10. 以太网 UDP 实时流式传输
+
+数据通过 ENET0 (RGMII) → lwIP UDP → 网线 → PC 实时传输。
+
+### 10.1 Block Design 配置
+
+在 Vivado Block Design 的 Zynq PS7 中配置 ENET0：
+
+| 配置项 | 值 |
+|--------|-----|
+| ENET0 | Enabled, MIO 16-27, RGMII, 1000 Mbps |
+| MDIO | Enabled, MIO 52-53 |
+| ENET0 clock | IO PLL, 125 MHz |
+
+### 10.2 BSP 修改
+
+#### 10.2.1 添加 lwIP 库
+
+Vitis → `platform_ad7606` → Board Support Package Settings → 勾选 `lwip220` → 重新生成 BSP。
+
+#### 10.2.2 强制千兆模式
+
+由于 YT8521S PHY 不在 lwIP 已知 PHY 列表中（仅支持 Marvell/TI/Realtek/ADI），需绕过 auto-negotiation：
+
+1. 修改 `lwipopts.h.in`：将 `@linkspeed@` 替换为 `#define CONFIG_LINKSPEED1000 1`
+2. 修改 `xemacpsif_physpeed.c`：`phy_setup_emacps()` 函数直接返回 `1000`，跳过所有 MDIO 操作
+3. 在 `helloworld.c` 中强制 `netif->flags |= NETIF_FLAG_LINK_UP`
+
+> 修改 `lwipopts.h.in` 和 `xemacpsif_physpeed.c` 后需 Clean 并重新 Build Platform 使改动生效。
+
+### 10.3 Vitis 应用程序
+
+#### 创建步骤
+
+1. 用 "Hello World" 模板创建 Application（如 `adc_ethernet`）
+2. 修改 `CMakeLists.txt`：`collect(PROJECT_LIB_DEPS xilstandalone;xiltimer;lwip220)`
+3. 修改 `lscript.ld`：`_HEAP_SIZE` 增大到 `0x20000` (128KB)
+4. 用 `vitis/ethernet_stream/src/helloworld.c` 替换模板代码
+
+#### 网络参数（可在源码中修改）
+
+```c
+#define LOCAL_IP_ADDR  "192.168.1.10"    // Zynq 板 IP
+#define DEST_IP_ADDR   "192.168.1.100"   // PC IP
+#define UDP_PORT       5001
+```
+
+#### Build & Run
+
+1. Build Platform（含 lwIP BSP）
+2. Build Application
+3. Debug/Run → UART 终端查看初始化日志
+
+#### UART 预期输出
+
+```
+========================================
+  AD7606 Ethernet UDP Streaming
+========================================
+
+[INIT] interrupts configured
+[INIT] lwIP starting...
+Using default Speed from design
+link speed: 1000 (forced)
+[INIT] UDP on port 5001 ready
+[INIT] setting forced link up...
+[INIT] resetting PL...
+[INIT] capture ON
+
+[10 banks sent]
+[20 banks sent]
+...
+```
+
+### 10.4 硬件连接
+
+```
+Zynq 板 RJ45 ──[网线]── PC 以太网口
+     192.168.1.10           192.168.1.100/24
+```
+
+### 10.5 PC 端：数据接收
+
+Windows 11 需先设置以太网静态 IP：`192.168.1.100` / `255.255.255.0`。
+
+接收到的数据按通道分别存入独立文件，每个文件为 int16 little-endian 格式：
+
+```
+<output_dir>/
+  ch1.bin   -- 通道 1 原始采样值 (int16 LE)
+  ch2.bin   -- 通道 2 原始采样值 (int16 LE)
+  ch3.bin   -- 通道 3 原始采样值 (int16 LE)
+  ch4.bin   -- 通道 4 原始采样值 (int16 LE)
+```
+
+```powershell
+# 收 1 秒数据（约 24 个 bank, 每个通道 ~200KB）
+python pc_receiver\ad7606_receiver.py --duration 1
+
+# 收 5 秒数据
+python pc_receiver\ad7606_receiver.py --duration 5
+
+# 按 bank 数接收
+python pc_receiver\ad7606_receiver.py --max-banks 50
+
+# 指定输出目录
+python pc_receiver\ad7606_receiver.py --duration 2 --output-dir capture_01
+```
+
+### 10.6 PC 端：数据绘图
+
+依赖：`pip install numpy matplotlib`
+
+```powershell
+# 默认：读取 ad7606_data\ 目录下的 ch1.bin ~ ch4.bin，4 通道分列子图
+python pc_receiver\ad7606_plot.py
+
+# 指定目录
+python pc_receiver\ad7606_plot.py --dir capture_01
+
+# 4 通道叠加显示
+python pc_receiver\ad7606_plot.py --dir ad7606_data --layout overlay
+
+# 只看前 512 个样本
+python pc_receiver\ad7606_plot.py --dir ad7606_data --samples 512
+
+# 保存为图片（不弹窗）
+python pc_receiver\ad7606_plot.py --dir ad7606_data --save plot.png
+
+# 仅打印统计信息
+python pc_receiver\ad7606_plot.py --dir ad7606_data --stats-only
+```
+
+### 10.7 修改摘要
+
+| 文件 | 改动 |
+|------|------|
+| `design_1.bd` | ENET0 MDIO → MIO 52/53 |
+| `bsp/.../lwipopts.h.in` | `CONFIG_LINKSPEED1000` 替代 AUTO_DETECT |
+| `bsp/.../xemacpsif_physpeed.c` | `phy_setup_emacps()` 直接返回 1000 |
+| `adc_ethernet/src/helloworld.c` | UDP 流式发送 + 强制 LINK_UP |
+| `adc_ethernet/src/CMakeLists.txt` | 添加 `lwip220` 库 |
+| `adc_ethernet/src/lscript.ld` | `_HEAP_SIZE = 0x20000` |
+| `system_top.v` | `RD_LOW_CLKS` 2→5 (AD7606C t_ACC 余量) |
+| `adc_sample4.v` | 两级 adc_db 流水线 + `RD_LOW_CLKS` 5→5 |
+| `pc_receiver/ad7606_receiver.py` | UDP 接收，按通道分文件存储 (ch1.bin ~ ch4.bin) |
+| `pc_receiver/ad7606_plot.py` | 读取分通道文件，4 通道绘图 + 统计 |

@@ -28,7 +28,7 @@ module system_top #(
     parameter integer ADC_TOTAL_CH     = 8,
     parameter integer RESET_CLKS       = 10,
     parameter integer CONVST_HIGH_CLKS = 2,
-    parameter integer RD_LOW_CLKS      = 2,
+    parameter integer RD_LOW_CLKS      = 5,
     parameter integer RD_HIGH_CLKS     = 2,
     parameter integer BANK_SAMPLE_COUNT = 4096
 )(
