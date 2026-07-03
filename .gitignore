@@ -36,6 +36,7 @@ vitis_unified/**/build/
 vitis_unified/**/_ide/
 vitis_unified/**/.cache/
 vitis_unified/**/.clangd*
+vitis_unified/**/.Xil/
 vitis_unified/**/compile_commands.json
 vitis_unified/**/bsp/
 vitis_unified/**/zynq_fsbl_bsp/
