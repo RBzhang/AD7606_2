@@ -31,10 +31,11 @@ vitis/
 *.lpr
 
 # Vitis Unified workspace build artifacts
+vitis_unified/**/.gitignore
 vitis_unified/**/build/
 vitis_unified/**/_ide/
 vitis_unified/**/.cache/
-vitis_unified/**/.clangd/
+vitis_unified/**/.clangd*
 vitis_unified/**/compile_commands.json
 vitis_unified/**/bsp/
 vitis_unified/**/zynq_fsbl_bsp/
@@ -56,6 +57,7 @@ vitis_unified/**/linker_files/
 # PC receiver data
 ad7606_data/
 ad7606_data.bin
+system_top.xsa
 
 # VS Code
 .vscode/
