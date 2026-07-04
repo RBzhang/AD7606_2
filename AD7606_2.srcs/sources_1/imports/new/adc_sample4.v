@@ -200,22 +200,22 @@ module adc_sample4 #(
     (* mark_debug = "true" *) reg [15:0] adc_db_synced  = 16'd0;
     (* mark_debug = "true" *) reg [15:0] adc_db_synced2 = 16'd0;
 
-    ila_data ila_data_inst (
-        .clk(clk),
-        .probe0(data_valid),
-        .probe1(ch1_data),
-        .probe2(ch2_data),
-        .probe3(ch3_data),
-        .probe4(ch4_data),
-        
-        .probe5(adc_convst_a),
-        .probe6(adc_cs_n),
-        .probe7(adc_rd_n),
-        .probe8(adc_reset),
-        .probe9(ch_idx),
-        .probe10(adc_db_synced),
-        .probe11(adc_db_synced2)
-    );
+    // ila_data ila_data_inst (
+    //     .clk(clk),
+    //     .probe0(data_valid),
+    //     .probe1(ch1_data),
+    //     .probe2(ch2_data),
+    //     .probe3(ch3_data),
+    //     .probe4(ch4_data),
+    //     
+    //     .probe5(adc_convst_a),
+    //     .probe6(adc_cs_n),
+    //     .probe7(adc_rd_n),
+    //     .probe8(adc_reset),
+    //     .probe9(ch_idx),
+    //     .probe10(adc_db_synced),
+    //     .probe11(adc_db_synced2)
+    // );
     always @(posedge clk) begin
         adc_db_synced  <= adc_db;
         adc_db_synced2 <= adc_db_synced;

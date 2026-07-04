@@ -1,7 +1,7 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0xA46113525B93EFD2",
+      "boundary_crc": "0xA4611352573167E0",
       "device": "xc7z020clg400-2",
       "gen_directory": "../../../../AD7606_2.gen/sources_1/bd/design_1",
       "name": "design_1",

@@ -1,8 +1,10 @@
 # AD7606 基于 Zynq-7020 的四通道同步采样系统
 
 本工程在 Xilinx Zynq-7020 (xc7z020clg400-2) 上实现 AD7606/AD7606C 并行接口的 4 通道同步采样：
-- **PL 端**：50 MHz 时钟驱动 ADC 并行读控制器，以 100 kSPS 速率采样并写入双缓冲 BRAM
+- **PL 端**：50 MHz 时钟驱动 ADC 并行读控制器，以 200 kSPS 速率采样并写入双缓冲 BRAM
 - **PS 端**：AXI GPIO 中断驱动，bank 填满时触发 ISR → 读取 BRAM → 释放 bank
+
+> **Vitis IDE**：本工程已迁移到 Vitis Unified IDE (2024.2)，原 Classic IDE 工作空间已废弃。详见 §11。
 
 ---
 
@@ -166,13 +168,17 @@ PC 端接收后按通道拆分存储为独立文件：
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `SYS_CLK_HZ` | 50_000_000 | 系统时钟 |
-| `SAMPLE_RATE_HZ` | 100_000 | 采样率 |
+| `SAMPLE_RATE_HZ` | 200_000 | 采样率（最大可稳定运行值，见 §11.2） |
 | `ADC_TOTAL_CH` | 8 | 每帧读取通道数 (V5~V8 丢弃) |
 | `RESET_CLKS` | 10 | ADC 复位脉宽 |
-| `CONVST_HIGH_CLKS` | 2 | CONVST 脉宽 |
-| `RD_LOW_CLKS` | 2 | RD 低电平时间 |
-| `RD_HIGH_CLKS` | 2 | RD 高电平时间 |
-| `BANK_SAMPLE_COUNT` | 4096 | 每 bank 样本数 (~41ms @100kSPS) |
+| `CONVST_HIGH_CLKS` | 2 | CONVST 脉宽 (40 ns) |
+| `RD_LOW_CLKS` | 5 | RD 低电平时间 (100 ns) |
+| `RD_HIGH_CLKS` | 2 | RD 高电平时间 (40 ns) |
+| `BANK_SAMPLE_COUNT` | 4096 | 每 bank 样本数 (~20ms @200kSPS) |
+
+FSM 时序预算（200 kSPS，周期 250 个 50MHz 时钟）：
+
+CONVST(2) + BUSY_H(~2) + BUSY_L(~50) + CS(2) + 8×[RD_LOW(5)+RD_SAMPLE(1)+RD_HIGH(2)] + DONE(1) ≈ **121 周期** < 250 ✓
 
 ---
 
@@ -405,3 +411,94 @@ python pc_receiver\ad7606_plot.py --dir ad7606_data --stats-only
 | `adc_sample4.v` | 两级 adc_db 流水线 + `RD_LOW_CLKS` 5→5 |
 | `pc_receiver/ad7606_receiver.py` | UDP 接收，按通道分文件存储 (ch1.bin ~ ch4.bin) |
 | `pc_receiver/ad7606_plot.py` | 读取分通道文件，4 通道绘图 + 统计 |
+
+---
+
+## 11. Vitis Unified IDE 迁移与调试
+
+本工程已从 Classic Vitis IDE (Eclipse-based, 2023.1-) 迁移到 Vitis Unified IDE (VS Code-based, 2024.2)。
+
+### 11.1 工程结构
+
+```
+vitis_unified/
+├── system_top.xsa              # 硬件平台（Vivado 导出）
+├── hello_world/                # PS 应用程序
+│   ├── vitis-comp.json
+│   └── src/
+│       ├── helloworld.c        # 主程序（含 SLCR 修复）
+│       ├── platform.c/h
+│       ├── CMakeLists.txt
+│       └── lscript.ld
+├── platform_da7606/            # 硬件平台
+│   ├── vitis-comp.json
+│   ├── hw/sdt/                 # 设备树
+│   ├── zynq_fsbl/              # FSBL
+│   └── ps7_cortexa9_0/         # 应用域 BSP
+└── boot.bif                    # 启动镜像配置文件
+```
+
+### 11.2 采样率上限分析
+
+AD7606C 理论支持 1 MSPS，但实际受限于 ADC 的 BUSY 转换时间：
+
+| 采样率 | 周期 (50MHz) | FSM 周期 | BUSY 容限 | 结果 |
+|--------|-------------|----------|-----------|------|
+| 100 kSPS | 500 | 121 | 379 | ✓ 稳定 |
+| 200 kSPS | 250 | 121 | 129 | ✓ 稳定 |
+| 250 kSPS | 200 | 121 | 79 | ✗ 超时 |
+| 300~500 kSPS | ≤166 | 121 | ≤45 | ✗ 超时 |
+
+200 kSPS 是本硬件环境下实测最大稳定采样率。瓶颈为 ADC 的 BUSY 信号持续时间（实测 ~140-180 周期 @50 MHz），无法进一步缩减。
+
+> **ILA 禁用**：在 Vitis Unified IDE 工具链下，`adc_sample4.v` 中的 ILA 调试核会导致 Vivado 综合问题——参数修改后 ILA OOC 综合无法正确重建，引起 PL 功能失效。已将 ILA 实例化注释掉（`adc_sample4.v:203~218`）。
+
+### 11.3 SDT 流程的 SLCR 修复
+
+Vitis Unified IDE 使用 SDT (System Device Tree) 流程。在此流程下，lwIP 库的 `SetUpSLCRDivisors()` 函数在 `#ifdef SDT` 分支直接跳过 SLCR 寄存器配置。导致 Zynq-7000 的 GEM0 时钟分频器（`SLCR_GEM0_CLK_CTRL`）未被正确设置，1000 Mbps 以太网链路无法建立。
+
+**修复**：在 `helloworld.c` 中手动配置 `SLCR_GEM0_CLK_CTRL`，设置 DIV0=8, DIV1=1 以产生 125 MHz GEM TX 时钟。同时在 `xemacif_input()` 调用前后确保了 GEM 硬件处于可控状态。
+
+> **注意**：每次 Build Platform 或 Update Hardware Specification 会重新生成 BSP（包括 `lwipopts.h`、`xemacpsif_physpeed.c` 等），将 SLCR 配置回退为 `AUTODETECT` 模式。因此 SLCR 修复直接写在应用层 `helloworld.c` 中，不依赖 BSP 文件。
+
+### 11.4 Flash 启动 (BOOT.bin)
+
+Flash 启动与 JTAG 调试的关键差异在于 PL 初始化：
+
+- **JTAG 模式**：XSDB 调试器负责编程 FPGA 并完整初始化 PS↔PL AXI 接口（释放 PL 复位、使能 level shifter）
+- **Flash 启动**：FSBL 通过 PCAP 编程 FPGA 后**可能未释放 PL 复位**，导致应用层访问 AXI GPIO 时读写挂死
+
+**修复**：添加 `ensure_pl_ready()` 函数（`helloworld.c:116~133`），在应用启动时检测 `FPGA_RST_CTRL` 寄存器——若 PL 仍处于复位状态（bit 0 = 1），则使能 level shifter 并释放 PL 复位。
+
+```c
+static void ensure_pl_ready(void)
+{
+    // 读取 FPGA_RST_CTRL (0xF8000240)
+    // 若 bit 0 = 1 (PL 在复位) → 解锁 SLCR → 使能 LVL_SHFTR → 释放 PL 复位
+    // 若 bit 0 = 0 → 直接返回（JTAG 模式已就绪）
+}
+```
+
+此外，`xemacif_input()` 在 Flash 启动下可能因 GEM DMA 状态不一致而卡死。将 `xemacif_input()` 从轮询循环内移到 bank 检测之后，确保 bank 数据优先处理。
+
+### 11.5 生成 BOOT.bin
+
+Vitis 2024.2 GUI 创建 Boot Image 存在限制，使用命令行 `bootgen` 生成：
+
+```powershell
+# 1. 创建 boot.bif 配置文件
+# 2. 执行 bootgen
+bootgen -image boot.bif -arch zynq -w -o BOOT.bin
+```
+
+`boot.bif` 内容：
+```
+the_ROM_image:
+{
+    [bootloader] platform_da7606/zynq_fsbl/build/fsbl.elf
+    hello_world/_ide/bitstream/system_top.bit
+    hello_world/build/hello_world.elf
+}
+```
+
+> **必须确保** `hello_world.elf` 是使用含 SLCR 修复的 `helloworld.c` 最新编译版本，否则 Flash 启动后以太网链路无法建立。

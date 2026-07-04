@@ -119,19 +119,38 @@ static void setup_gem_clock_1000mbps(void)
     volatile uint32_t *slcr_lock   = (volatile uint32_t *)SLCR_LOCK_ADDR;
     volatile uint32_t *slcr_gem0   = (volatile uint32_t *)SLCR_GEM0_CLK;
 
-    uint32_t reg = *slcr_gem0;
-
-    if (reg & 0x40) return;
-
     *slcr_unlock = SLCR_UNLOCK_KEY;
 
+    uint32_t reg = *slcr_gem0;
     reg &= 0xFC0FC0FFU;
     reg |= (1U << 20) | (8U << 8);
-
     *slcr_gem0 = reg;
+
     *slcr_lock = SLCR_LOCK_KEY;
 
     xil_printf("[INIT] GEM0 SLCR clock set for 1000Mbps\r\n");
+}
+
+static void ensure_pl_ready(void)
+{
+    volatile uint32_t *slcr_unlock = (volatile uint32_t *)(SLCR_BASE + 0x008U);
+    volatile uint32_t *slcr_lock   = (volatile uint32_t *)(SLCR_BASE + 0x004U);
+    volatile uint32_t *lvl_shftr   = (volatile uint32_t *)(SLCR_BASE + 0x900U);
+    volatile uint32_t *fpga_rst    = (volatile uint32_t *)(SLCR_BASE + 0x240U);
+
+    uint32_t rst = *fpga_rst;
+
+    if ((rst & 0x1) == 0) return;
+
+    *slcr_unlock = 0xDF0D;
+
+    *lvl_shftr = 0xA;
+    *fpga_rst = rst & ~0x1U;
+    busy_dly(500000);
+
+    *slcr_lock = 0x767B;
+
+    xil_printf("[INIT] PL interface configured\r\n");
 }
 
 static int init_intr(void)
@@ -210,6 +229,9 @@ int main(void)
     xil_printf("  AD7606 Ethernet UDP Streaming\r\n");
     xil_printf("========================================\r\n\r\n");
 
+    /* Ensure PL is accessible (flash boot FSBL may leave PL in reset) */
+    ensure_pl_ready();
+
     /* GPIO direction */
     *(volatile uint32_t *)GPIO_TRI  = 0xFFFFFFFFU;
     *(volatile uint32_t *)GPIO2_TRI = 0x00000000U;
@@ -264,27 +286,24 @@ int main(void)
     /* enable capture */
     xil_printf("[INIT] capture ON\r\n\r\n");
     *gpio2_data = CTRL_CAP_EN;
-    xil_printf("[DBG] cap_en set, st=0x%08lX\r\n", (unsigned long)*gpio_data);
 
     int nbanks = 0;
     int max    = 0;   /* 0 = unlimited streaming */
 
     while (max == 0 || nbanks < max) {
-        /* poll events (ISR + fallback) */
         int to = 0;
         while (!g_events) {
-            xemacif_input(&g_netif);  /* feed lwIP rx/ARP */
-
             uint32_t s = *gpio_data;
             if (s & (STAT_BANK0 | STAT_BANK1)) {
                 g_events |= (s & (STAT_BANK0 | STAT_BANK1));
                 break;
             }
             if (++to > 20000000) {
-                xil_printf("[DIAG] TIMEOUT st=0x%08lX\r\n", (unsigned long)s);
+                xil_printf("[DIAG] TIMEOUT st=0x%08X\r\n", (unsigned)s);
                 goto done;
             }
         }
+        xemacif_input(&g_netif);
 
         uint32_t ev;
         __asm__ volatile("cpsid i");
