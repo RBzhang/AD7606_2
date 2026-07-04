@@ -24,7 +24,7 @@
 
 module system_top #(
     parameter integer SYS_CLK_HZ       = 50_000_000,
-    parameter integer SAMPLE_RATE_HZ   = 200_000,
+    parameter integer SAMPLE_RATE_HZ   = 100_000,
     parameter integer ADC_TOTAL_CH     = 8,
     parameter integer RESET_CLKS       = 10,
     parameter integer CONVST_HIGH_CLKS = 2,
