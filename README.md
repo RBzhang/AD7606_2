@@ -1,7 +1,7 @@
 # AD7606 基于 Zynq-7020 的四通道同步采样系统
 
 本工程在 Xilinx Zynq-7020 (xc7z020clg400-2) 上实现 AD7606/AD7606C 并行接口的 4 通道同步采样：
-- **PL 端**：50 MHz 时钟驱动 ADC 并行读控制器，以 100 kSPS 速率采样并写入双缓冲 BRAM
+- **PL 端**：50 MHz 时钟驱动 ADC 并行读控制器，以 200 kSPS 速率采样并写入双缓冲 BRAM
 - **PS 端**：AXI GPIO 中断驱动，bank 填满时触发 ISR → 读取 BRAM → 释放 bank
 
 > **Vitis IDE**：本工程已迁移到 Vitis Unified IDE (2024.2)，原 Classic IDE 工作空间已废弃。详见 §11。
@@ -168,15 +168,15 @@ PC 端接收后按通道拆分存储为独立文件：
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `SYS_CLK_HZ` | 50_000_000 | 系统时钟 |
-| `SAMPLE_RATE_HZ` | 100_000 | 采样率 |
+| `SAMPLE_RATE_HZ` | 200_000 | 采样率（最大可稳定运行值，见 §11.2） |
 | `ADC_TOTAL_CH` | 8 | 每帧读取通道数 (V5~V8 丢弃) |
 | `RESET_CLKS` | 10 | ADC 复位脉宽 |
 | `CONVST_HIGH_CLKS` | 2 | CONVST 脉宽 (40 ns) |
 | `RD_LOW_CLKS` | 5 | RD 低电平时间 (100 ns) |
 | `RD_HIGH_CLKS` | 2 | RD 高电平时间 (40 ns) |
-| `BANK_SAMPLE_COUNT` | 4096 | 每 bank 样本数 (~41ms @100kSPS) |
+| `BANK_SAMPLE_COUNT` | 4096 | 每 bank 样本数 (~20ms @200kSPS) |
 
-FSM 时序预算（100 kSPS，周期 500 个 50MHz 时钟）：
+FSM 时序预算（200 kSPS，周期 250 个 50MHz 时钟）：
 
 CONVST(2) + BUSY_H(~2) + BUSY_L(~50) + CS(2) + 8×[RD_LOW(5)+RD_SAMPLE(1)+RD_HIGH(2)] + DONE(1) ≈ **121 周期** < 250 ✓
 
