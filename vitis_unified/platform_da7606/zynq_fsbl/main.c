@@ -726,14 +726,6 @@ void FsblHandoff(u32 FsblStartAddr)
 	/*
 	 * Enable level shifter
 	 */
-	if(BitstreamFlag) {
-		/*
-		 * FSBL will not enable the level shifters for a NON PS instantiated
-		 * Bitstream
-		 * CR# 671028
-		 * This flag can be set during compilation for a NON PS instantiated
-		 * bitstream
-		 */
 #ifndef NON_PS_INSTANTIATED_BITSTREAM
 #ifdef PS7_POST_CONFIG
 		ps7_post_config();
@@ -760,7 +752,6 @@ void FsblHandoff(u32 FsblStartAddr)
 			FPGA_RESET_REG ,Xil_In32(FPGA_RESET_REG));
 #endif
 #endif
-	}
 
 	/*
 	 * FSBL user hook call before handoff to the application
