@@ -133,24 +133,23 @@ static void setup_gem_clock_1000mbps(void)
 
 static void ensure_pl_ready(void)
 {
+    volatile uint32_t *fpga_rst = (volatile uint32_t *)(SLCR_BASE + 0x240U);
+    volatile uint32_t *lvl_shftr = (volatile uint32_t *)(SLCR_BASE + 0x900U);
+
+    if (((*fpga_rst) & 0x1) == 0 && ((*lvl_shftr) & 0x3) == 0x3) {
+        busy_dly(5000000);
+        return;
+    }
+
     volatile uint32_t *slcr_unlock = (volatile uint32_t *)(SLCR_BASE + 0x008U);
     volatile uint32_t *slcr_lock   = (volatile uint32_t *)(SLCR_BASE + 0x004U);
-    volatile uint32_t *lvl_shftr   = (volatile uint32_t *)(SLCR_BASE + 0x900U);
-    volatile uint32_t *fpga_rst    = (volatile uint32_t *)(SLCR_BASE + 0x240U);
-
-    uint32_t rst = *fpga_rst;
-
-    if ((rst & 0x1) == 0) return;
 
     *slcr_unlock = 0xDF0D;
-
     *lvl_shftr = 0xA;
-    *fpga_rst = rst & ~0x1U;
+    *fpga_rst = *fpga_rst & ~0x1U;
     busy_dly(500000);
-
     *slcr_lock = 0x767B;
-
-    xil_printf("[INIT] PL interface configured\r\n");
+    busy_dly(1000000);
 }
 
 static int init_intr(void)
@@ -214,6 +213,8 @@ static void udp_send_bank(int is_bank1)
 
         udp_sendto(g_udp, p, &g_dest_ip, UDP_PORT);
         pbuf_free(p);
+
+        busy_dly(2000);  /* ~10us gap between fragments to avoid PC buffer overflow */
 
         left -= n;
         fidx++;
@@ -293,6 +294,8 @@ int main(void)
     while (max == 0 || nbanks < max) {
         int to = 0;
         while (!g_events) {
+            xemacif_input(&g_netif);
+
             uint32_t s = *gpio_data;
             if (s & (STAT_BANK0 | STAT_BANK1)) {
                 g_events |= (s & (STAT_BANK0 | STAT_BANK1));
@@ -303,7 +306,6 @@ int main(void)
                 goto done;
             }
         }
-        xemacif_input(&g_netif);
 
         uint32_t ev;
         __asm__ volatile("cpsid i");

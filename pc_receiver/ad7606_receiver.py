@@ -76,6 +76,10 @@ def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int
     banks_received = 0
     bank_seq_counter = {0: 0, 1: 0}
     total_bytes_received = 0
+    lost_packets = 0
+    lost_fragments = 0
+    last_frag = -1
+    last_bank = -1
 
     try:
         t_start = time.monotonic()
@@ -107,6 +111,16 @@ def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int
             frag_seq = struct.unpack_from("<I", data, 4)[0]
             start_idx = struct.unpack_from("<I", data, 8)[0]
             payload = data[HEADER_SIZE:]
+
+            if last_bank == bank_id and frag_seq != last_frag + 1:
+                lost_fragments += frag_seq - last_frag - 1
+                lost_packets += frag_seq - last_frag - 1
+            elif last_bank >= 0 and bank_id != last_bank:
+                if frag_seq != 0 and last_frag != FRAGMENTS_PER_BANK - 1:
+                    lost_packets += FRAGMENTS_PER_BANK - 1 - last_frag
+                    lost_fragments += FRAGMENTS_PER_BANK - 1 - last_frag
+            last_bank = bank_id
+            last_frag = frag_seq
 
             expected_payload = min(
                 (BANK_SAMPLE_COUNT - start_idx) * 8,
@@ -190,6 +204,8 @@ def receive_data(port: int, output_dir: str, max_duration: float, max_banks: int
             fh.close()
 
     print(f"\nDone. {banks_received} banks received.")
+    total_pkts = banks_received * FRAGMENTS_PER_BANK
+    print(f"Total fragments expected: {total_pkts},  lost: {lost_packets} ({100.0*lost_packets/total_pkts if total_pkts else 0:.1f}%)")
     print(f"Total bytes received: {total_bytes_received}")
     for ch in range(CHANNELS):
         fpath = out_path / f"ch{ch + 1}.bin"
